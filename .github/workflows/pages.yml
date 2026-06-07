@@ -63,20 +63,26 @@ jobs:
         with:
           version: latest
 
-      - name: Build project generator web app
+      - name: Use local libfdx source dependencies
+        working-directory: source
+        run: |
+          {
+            echo "development.usePublishedLibfdx=false"
+            echo "development.publishedLibfdxVersion=-SNAPSHOT"
+          } > local.properties
+
+      - name: Stage Pages web outputs
         working-directory: source
         run: |
           chmod +x ./gradlew
-          ./gradlew :libfdx:tools:project-generator:platform:web:build_web_js --console=plain
+          ./gradlew stage_pages --console=plain
 
       - name: Compose Pages site
         run: |
           rm -rf site
           mkdir -p site
           rsync -a --delete --exclude='.git' --exclude='.github' website/ site/
-          rm -rf site/project-generator
-          mkdir -p site/project-generator
-          cp -a source/libfdx/tools/project-generator/platform/web/build/dist/web-js/webapp/. site/project-generator/
+          cp -a source/build/pages/. site/
           touch site/.nojekyll
 
       - name: Configure Pages
