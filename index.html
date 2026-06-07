@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>libfdx</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: Arial, Helvetica, sans-serif;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #f6f7f9;
+        color: #1f2328;
+      }
+
+      main {
+        width: min(720px, calc(100% - 48px));
+      }
+
+      h1 {
+        margin: 0 0 12px;
+        font-size: clamp(2.5rem, 9vw, 5rem);
+        line-height: 1;
+      }
+
+      p {
+        margin: 0 0 24px;
+        font-size: 1.125rem;
+        line-height: 1.6;
+      }
+
+      nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+
+      a {
+        color: #0969da;
+        font-weight: 700;
+        text-decoration: none;
+      }
+
+      a:hover,
+      a:focus {
+        text-decoration: underline;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        body {
+          background: #0d1117;
+          color: #f0f6fc;
+        }
+
+        a {
+          color: #58a6ff;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>libfdx</h1>
+      <p>Project resources for libfdx.</p>
+      <nav aria-label="libfdx links">
+        <a href="https://github.com/libfdx">GitHub organization</a>
+        <a href="/libfdx/project-generator/">Project generator</a>
+      </nav>
+    </main>
+  </body>
+</html>
