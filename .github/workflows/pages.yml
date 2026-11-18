@@ -90,16 +90,11 @@ jobs:
         with:
           add-job-summary: never
 
-      - name: Set up Emscripten
-        uses: mymindstorm/setup-emsdk@v16
-        with:
-          version: latest
-
       - name: Stage Pages web outputs
         working-directory: source
         run: |
           chmod +x ./gradlew
-          ./gradlew stage_pages :libfdx:tools:project-generator:platform:desktop:test_export_project --console=plain
+          ./gradlew :libfdx:tools:project-generator:platform:desktop:test_export_project --console=plain
           starter=libfdx/tools/project-generator/platform/desktop/build/tmp/project-generator-export-smoke/base-starter-project
           version=$(sed -n 's/^libfdxVersion=//p' "$starter/gradle.properties")
           [[ -n "$version" ]]
@@ -108,6 +103,17 @@ jobs:
             [[ "$version" == "${sha:0:8}-SNAPSHOT" ]]
           fi
           ./gradlew -p "$starter" :core:classes :platform:desktop:classes
+
+          repo="$RUNNER_TEMP/pages-maven"
+          mvn --batch-mode --no-transfer-progress org.apache.maven.plugins:maven-dependency-plugin:3.11.0:get \
+            "-Dmaven.repo.local=$repo" "-Dartifact=io.github.libfdx:fdx_web:$version" -Dtransitive=false \
+            -DremoteRepositories=https://central.sonatype.com/repository/maven-snapshots/
+          runtime=libfdx/framework/fdx/platform/web/build/generated/resources/runtimeFdxWeb
+          mkdir -p "$runtime"
+          unzip -o "$repo/io/github/libfdx/fdx_web/$version/fdx_web-$version.jar" fdx.js fdx.wasm -d "$runtime"
+          ./gradlew stage_pages -x :libfdx:framework:fdx:platform:web:generate_runtime_fdx_web_native --console=plain
+          cmp "$runtime/fdx.js" build/pages/project-generator/scripts/fdx.js
+          cmp "$runtime/fdx.wasm" build/pages/project-generator/scripts/fdx.wasm
           echo "$version" > build/pages/project-generator/libfdx-version.txt
 
       - name: Compose Pages site
