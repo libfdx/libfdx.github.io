@@ -4,9 +4,10 @@ on:
   workflow_dispatch:
     inputs:
       libfdx_ref:
-        description: libfdx branch, tag, or commit to build.
+        description: Published libFDX branch, tag or commit. Defaults to the latest successful snapshot.
         required: false
-        default: master
+  schedule:
+    - cron: '17,47 * * * *'
   repository_dispatch:
     types:
       - pages
@@ -24,11 +25,42 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
-env:
-  LIBFDX_REF: ${{ github.event.inputs.libfdx_ref || github.event.client_payload.ref || 'master' }}
-
 jobs:
+  revision:
+    runs-on: ubuntu-latest
+    outputs:
+      ref: ${{ steps.select.outputs.ref }}
+      published: ${{ steps.select.outputs.published }}
+      deploy: ${{ steps.select.outputs.deploy }}
+    steps:
+      - id: select
+        name: Select the verified libFDX revision
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_REF: ${{ inputs.libfdx_ref || github.event.client_payload.ref }}
+        run: |
+          published=$(gh api 'repos/libfdx/libfdx/actions/workflows/workflow_snapshot.yml/runs?branch=master&event=push&status=success&per_page=1' --jq '.workflow_runs[0].head_sha')
+          [[ "$published" =~ ^[0-9a-f]{40}$ ]]
+          ref=${REQUESTED_REF:-$published}
+          git check-ref-format "refs/tags/$ref"
+          echo "published=$published" >> "$GITHUB_OUTPUT"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_EVENT_NAME" == schedule ]]; then
+            url="https://libfdx.github.io/last-verified-snapshot.txt?run=$GITHUB_RUN_ID"
+            status=$(curl --silent --show-error --location --retry 3 --output previous --write-out '%{http_code}' "$url")
+            case "$status" in
+              200) if [[ "$(cat previous)" == "$published" ]]; then exit 0; fi ;;
+              404) ;;
+              *) echo "Reading the deployed snapshot returned HTTP $status"; exit 1 ;;
+            esac
+          fi
+          echo 'deploy=true' >> "$GITHUB_OUTPUT"
+
   deploy:
+    needs: revision
+    if: needs.revision.outputs.deploy == 'true'
+    env:
+      LIBFDX_REF: ${{ needs.revision.outputs.ref }}
     name: Build and Deploy Pages
     runs-on: ubuntu-latest
     environment:
@@ -63,26 +95,30 @@ jobs:
         with:
           version: latest
 
-      - name: Use local libfdx source dependencies
-        working-directory: source
-        run: |
-          {
-            echo "development.usePublishedLibfdx=false"
-            echo "development.publishedLibfdxVersion=-SNAPSHOT"
-          } > local.properties
-
       - name: Stage Pages web outputs
         working-directory: source
         run: |
           chmod +x ./gradlew
-          ./gradlew stage_pages --console=plain
+          ./gradlew stage_pages :libfdx:tools:project-generator:platform:desktop:test_export_project --console=plain
+          starter=libfdx/tools/project-generator/platform/desktop/build/tmp/project-generator-export-smoke/base-starter-project
+          version=$(sed -n 's/^libfdxVersion=//p' "$starter/gradle.properties")
+          [[ -n "$version" ]]
+          if grep -Fxq 'libfdxGeneratorChannel=snapshot' "$starter/gradle.properties"; then
+            sha=$(git rev-parse HEAD)
+            [[ "$version" == "${sha:0:8}-SNAPSHOT" ]]
+          fi
+          ./gradlew -p "$starter" :core:classes :platform:desktop:classes
+          echo "$version" > build/pages/project-generator/libfdx-version.txt
 
       - name: Compose Pages site
+        env:
+          VERIFIED_SNAPSHOT: ${{ needs.revision.outputs.published }}
         run: |
           rm -rf site
           mkdir -p site
           rsync -a --delete --exclude='.git' --exclude='.github' website/ site/
           cp -a source/build/pages/. site/
+          echo "$VERIFIED_SNAPSHOT" > site/last-verified-snapshot.txt
           touch site/.nojekyll
 
       - name: Configure Pages
